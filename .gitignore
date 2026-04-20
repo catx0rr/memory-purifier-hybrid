@@ -1,0 +1,10 @@
+# Design-time spec notes
+.spec/
+
+# Regression harness
+tests/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
