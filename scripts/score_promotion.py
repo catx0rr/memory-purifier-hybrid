@@ -2,7 +2,7 @@
 """Pass 1 — promotion scoring.
 
 Loads prompts/promotion-pass.md as the system prompt, sends a candidate batch
-(from extract_candidates.py) to the configured LLM backend, validates the
+(from extract_candidates.py) to the configured model backend, validates the
 returned verdicts against the Pass 1 output schema, and persists rejected /
 deferred candidates to JSONL. Emits one JSON summary object to stdout.
 
@@ -58,7 +58,7 @@ def compute_strength(scores: dict) -> float:
 def validate_verdicts(verdicts_obj, input_candidates: list, run_id: str) -> tuple:
     """Cross-check verdicts against Pass 1 output schema.
 
-    The strength-formula self-check (re-derived vs LLM-emitted) is the key
+    The strength-formula self-check (re-derived vs model-emitted) is the key
     defense against hallucinated scoring.
     """
     errors: list = []
@@ -164,7 +164,7 @@ def _approximate_tokens(text: str) -> int:
     ~4 chars per token is a rough English-plus-JSON average. Tokenizer-based
     estimates would be more accurate but require the anthropic package; this
     heuristic is acceptable per the audit's 'approximate' rule and avoids
-    asking the LLM to self-report its own usage.
+    asking the model to self-report its own usage.
     """
     if not text:
         return 0
@@ -207,7 +207,7 @@ def invoke_backend(
     max_tokens: int = None,
     timeout: int = 300,
 ) -> dict:
-    """Invoke the configured LLM backend.
+    """Invoke the configured model backend.
 
     Returns {"raw": <response text>, "usage": <token_usage block>}. Token usage
     is 'exact' when the provider returns usage metadata, 'approximate' when
@@ -315,7 +315,7 @@ def main() -> int:
     ap.add_argument("--prompt", help="Path to prompts/promotion-pass.md (default: resolved from script location)")
     ap.add_argument("--workspace", help="Workspace root override")
     ap.add_argument("--runtime-dir", help="Runtime dir override (default: <workspace>/runtime)")
-    ap.add_argument("--backend", default=None, help="LLM backend: claude-code | anthropic-sdk | file")
+    ap.add_argument("--backend", default=None, help="Model backend: claude-code | anthropic-sdk | file")
     ap.add_argument("--model", help="Model override")
     ap.add_argument("--max-tokens", type=int, help="Max output tokens")
     ap.add_argument("--fixture-dir", help="Fixture directory (backend=file)")

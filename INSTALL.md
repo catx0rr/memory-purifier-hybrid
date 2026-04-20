@@ -1,6 +1,6 @@
 # INSTALL.md — Guided First-Time Initialization
 
-**This is the agent-facing initialization flow. `install.sh` seeds the package; this guide runs the first live passes with gated one-line questions. An LLM or operator follows these steps top-to-bottom, pausing at each `❓` prompt for a yes/no or short answer.**
+**Follow this doc top-to-bottom, pause at each `❓` prompt for a short answer, and run the commands as-written using deterministic values only.**
 
 ---
 
@@ -13,8 +13,40 @@
 
 > ❓ **Do you want me to install memory-purifier now, or read what it is for first and give insights?**
 >
-> - **Install now** → continue to §1.
-> - **Explain first** → summarize [`README.md`](README.md) (post-consolidation, non-destructive canonicalization; two-pass LLM; reads `MEMORY.md`/`RTMEMORY.md`/`PROCEDURES.md`/`episodes/`; emits `LTMEMORY.md`/`PLAYBOOKS.md`/`EPISODES.md`), then re-ask this question.
+> - **Install now** → continue to §0.1.
+> - **Explain first** → summarize [`README.md`](README.md) (post-consolidation, non-destructive canonicalization; two-pass scoring with an agent supervisor on top; reads `MEMORY.md`/`RTMEMORY.md`/`PROCEDURES.md`/`episodes/`; emits `LTMEMORY.md`/`PLAYBOOKS.md`/`EPISODES.md`), then re-ask this question.
+
+---
+
+## 0.1. Skip-check — is it already installed?
+
+Run this detection before §1. If the operator ran `install.sh` earlier, §1 and §2 can be skipped.
+
+```bash
+SKILLS_PATH="${SKILLS_PATH:-$HOME/.openclaw/workspace/skills}"
+SKILL_ROOT="$SKILLS_PATH/memory-purifier"
+CONFIG_ROOT="${CONFIG_ROOT:-$HOME/.openclaw}"
+WORKSPACE="${WORKSPACE:-$HOME/.openclaw/workspace}"
+
+DETECTED=0
+[ -f "$SKILL_ROOT/SKILL.md" ] && DETECTED=$((DETECTED+1))
+[ -f "$CONFIG_ROOT/memory-purifier/memory-purifier.json" ] && DETECTED=$((DETECTED+1))
+[ -f "$WORKSPACE/runtime/purifier-metadata.json" ] && DETECTED=$((DETECTED+1))
+python3 -c "import json; d=json.load(open('$WORKSPACE/runtime/memory-state.json')); exit(0 if 'memoryPurifier' in d else 1)" 2>/dev/null && DETECTED=$((DETECTED+1))
+CRON_COUNT="$(openclaw cron list --json 2>/dev/null | python3 -c "import json,sys; print(sum(1 for j in json.load(sys.stdin) if j.get('name','').startswith('memory-purifier-')))" 2>/dev/null || echo 0)"
+
+printf 'components_detected=%s/4\ncron_jobs_registered=%s\n' "$DETECTED" "$CRON_COUNT"
+```
+
+- `components_detected=0/4` and `cron_jobs_registered=0` → fresh system; continue to §1.
+- `components_detected>=2` or `cron_jobs_registered>=1` → memory-purifier is already installed.
+
+### If already installed
+
+> ❓ **Memory purifier is already installed on this system (detected {components_detected}, {cron_jobs_registered} cron jobs). Do you still want me to run INSTALL.md?**
+>
+> - **No** → skip §1 and §2 (the installer). Proceed to §3 (Verify seeded runtime), §4 (Reflections gate), §5 (First live incremental), and §8 (optional first reconciliation).
+> - **Yes** → continue to §1. `install.sh` is idempotent — existing config is preserved unless `--force-config` is passed.
 
 ---
 
@@ -46,7 +78,8 @@ Map the answers:
 
 ```bash
 # specify your skill root defaults to workspace/skills/ directory
-SKILL_ROOT="$HOME/.openclaw/workspace/skills/memory-purifier"
+export SKILLS_PATH="$HOME/.openclaw/workspace/skills"
+SKILL_ROOT="$SKILLS_PATH/memory-purifier"
 
 # Remote install (uses the answers from §1; replace values accordingly)
 curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier-hybrid/main/install.sh | \
@@ -60,6 +93,8 @@ curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier-hybrid/main
 cd <path-to-package>
 bash install.sh --agent-profile <business|personal> --cron-tz <IANA> --cron-announce <true|false> --timeout-seconds <int>
 ```
+
+The installer reads `SKILLS_PATH` from the environment, so `export`-ing it before the `curl | bash` line above redirects where the package lands. Same pattern applies to the other env-var overrides listed below.
 
 ### CLI flag reference
 
@@ -115,7 +150,8 @@ Read `<abs-path>/prompts/incremental-purifier-prompt.md` and follow every step s
 
 ```bash
 # specify your skill root defaults to workspace/skills/ directory
-SKILL_ROOT="$HOME/.openclaw/workspace/skills/memory-purifier"
+SKILLS_PATH="${SKILLS_PATH:-$HOME/.openclaw/workspace/skills}"
+SKILL_ROOT="$SKILLS_PATH/memory-purifier"
 CONFIG_ROOT="${CONFIG_ROOT:-$HOME/.openclaw}"
 WORKSPACE="${WORKSPACE:-$HOME/.openclaw/workspace}"
 RUNTIME_DIR="$WORKSPACE/runtime"
@@ -176,7 +212,7 @@ Skip to §5 without the disposable-workspace test.
 python3 "$SKILL_ROOT/scripts/run_purifier.py" --mode incremental
 ```
 
-Reads live consolidated substrate, runs both LLM passes, writes artifacts, renders markdown views, writes manifest, validates, signals downstream. On success the orchestrator prints a summary JSON with `"status": "ok"`.
+Reads live consolidated substrate, runs both scoring passes, writes artifacts, renders markdown views, writes manifest, validates, signals downstream. On success the orchestrator prints a summary JSON with `"status": "ok"`.
 
 ---
 
@@ -269,11 +305,11 @@ Resolve the next schedule deterministically from `openclaw cron list --json`, pi
 Deeper issues: inspect
 
 - `$RUNTIME_DIR/purified-manifest.json` — `warnings[]`, `partialFailures[]` for the latest run
-- `$RUNTIME_DIR/locks/failed-*.json` — raw LLM responses on Pass 1 / Pass 2 validation failure
+- `$RUNTIME_DIR/locks/failed-*.json` — raw model responses on Pass 1 / Pass 2 validation failure
 - `$HOME/.openclaw/telemetry/memory-log-YYYY-MM-DD.jsonl` — shared memory-log; filter with `jq 'select(.component == "memory-purifier.purifier")'`
 - `$TELEMETRY_ROOT/last-run.md` — deterministic human-readable snapshot of the last run
 
-**Telemetry shape:** every event carries `domain: "memory"`, `component: "memory-purifier.purifier"`, `event ∈ {run_started, run_completed, run_skipped, run_failed}`, plus a `token_usage` block. Token usage counts only Pass 1 + Pass 2 LLM calls — `exact` when the provider returns usage metadata, `approximate` when computed from char counts, `unavailable` when no real model was invoked (fixture runs, `run_started` events).
+**Telemetry shape:** every event carries `domain: "memory"`, `component: "memory-purifier.purifier"`, `event ∈ {run_started, run_completed, run_skipped, run_failed}`, plus a `token_usage` block. Token usage counts only Pass 1 + Pass 2 scoring calls — `exact` when the provider returns usage metadata, `approximate` when computed from char counts, `unavailable` when no real model was invoked (fixture runs, `run_started` events).
 
 **Chat reporting** lives in `<workspace>/runtime/memory-state.json` under `memoryPurifier.reporting`:
 

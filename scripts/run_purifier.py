@@ -14,7 +14,7 @@ Owns:
 - staging directory for inter-step JSONs (kept on failure for post-mortem)
 - mode selection (incremental | reconciliation)
 - dry-run propagation
-- LLM backend propagation to the two scoring steps
+- model backend propagation to the two scoring steps
 - clean summary JSON output
 
 Each step's output is read, inspected for status, and forwarded to the next
@@ -492,7 +492,7 @@ def main() -> int:
     ap.add_argument("--runtime-dir", help="Runtime dir override")
     ap.add_argument("--telemetry-root", help="Package telemetry root (default: ~/.openclaw/telemetry/memory-purifier). Holds last-run.md directly (flat).")
     ap.add_argument("--global-log-root", help="Shared memory-log root (default: ~/.openclaw/telemetry). Memory-log JSONL appended here.")
-    ap.add_argument("--backend", help="LLM backend for scoring passes: claude-code | anthropic-sdk | file")
+    ap.add_argument("--backend", help="Model backend for scoring passes: claude-code | anthropic-sdk | file")
     ap.add_argument("--fixture-dir", help="Fixture directory (backend=file)")
     ap.add_argument("--timezone", help="IANA timezone name")
     ap.add_argument("--stale-lock-hours", type=int, default=STALE_LOCK_HOURS_DEFAULT, help="Overwrite a lock older than this (default: 2h)")
@@ -672,7 +672,7 @@ def main() -> int:
         if final_status == "ok" and (val or {}).get("status") == "errors":
             final_status = "validation_failed"
 
-        # Aggregate LLM-only token usage across Pass 1 + Pass 2.
+        # Aggregate scoring-pass-only token usage across Pass 1 + Pass 2.
         run_usage = _usage_unavailable()
         if pass1 and isinstance(pass1, dict):
             run_usage = _merge_usage(run_usage, pass1.get("token_usage") or _usage_unavailable())

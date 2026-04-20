@@ -70,7 +70,7 @@ Per `CLAUDE.md §7`, this file is namespace-owned by `memory-purifier` — it ca
 | `paths.runtime_dir` | abs path or `null` | `null` → `<workspace>/runtime` | Explicit live-runtime override (flat layout — purifier files live directly at this level with `purifier-` / `purified-` prefixes) |
 | `paths.telemetry_root` | abs path or `null` | `null` → `~/.openclaw/telemetry/memory-purifier` | Explicit telemetry override |
 | `paths.config_root` | abs path or `null` | `null` → `~/.openclaw/memory-purifier` | Explicit config-dir override |
-| `prompts.backend` | `"claude-code" \| "openclaw" \| "anthropic-sdk"` | `"claude-code"` | Which backend the LLM passes invoke |
+| `prompts.backend` | `"claude-code" \| "openclaw" \| "anthropic-sdk"` | `"claude-code"` | Which model backend the scoring passes invoke |
 | `prompts.model` | string or `null` | `null` → backend default | Model override for both passes |
 | `prompts.max_tokens` | int or `null` | `null` → backend default | Output token cap per pass invocation |
 | `limits.max_candidates_per_batch` | int | `40` | Pass 1 batching ceiling |
@@ -139,7 +139,7 @@ Shape:
 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
-| `reporting.enabled` | bool | `false` | Whether the cron LLM may post anything to chat. `false` = fully silent (telemetry + manifest still record). |
+| `reporting.enabled` | bool | `false` | Whether the cron agent may post anything to chat. `false` = fully silent (telemetry + manifest still record). |
 | `reporting.mode` | `"silent" \| "summary" \| "full"` | `"summary"` | When `enabled: true`: `silent` = nothing in chat; `summary` = compact one-liner; `full` = two-to-three line bounded report with token usage line. |
 | `reporting.delivery.channel` | string | `"last"` | Which chat route to post to. `"last"` asks the host to reuse the most recent route. |
 | `reporting.delivery.to` | string or `null` | `null` | Explicit target override. |

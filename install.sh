@@ -565,7 +565,7 @@ fi
 
 # ── F. Register cron jobs ─────────────────────────────────────────────
 # Cron registration passes a short LAUNCHER message (not the prompt body)
-# that points the cron LLM at the correct top-level prompt file. The prompt
+# that points the cron agent at the correct top-level prompt file. The prompt
 # file owns all operational instructions; cron metadata stays small.
 
 if [ "$SKIP_CRON" = "1" ]; then

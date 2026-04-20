@@ -8,7 +8,7 @@ Non-goals: it is not a consolidator, not the reconciler, not authority control, 
 
 ## What it does
 
-Runs a cron-driven pipeline of deterministic scripts with two LLM passes:
+Runs a cron-driven pipeline of deterministic scripts with two scoring passes (narrow schema-bound model calls; the orchestrating agent lives at the cron-supervisor level):
 
 1. **Pass 1 — Promotion scoring:** for each candidate memory unit, decide survival (`reject` / `defer` / `compress` / `merge` / `promote`).
 2. **Pass 2 — Canonicalization:** for each surviving cluster, assign canonical wording, one primary home, provenance, contradiction state, and freshness/confidence posture.
@@ -51,7 +51,7 @@ Views are regenerated every run. Do not edit them by hand.
 - **Latest-run report** — `~/.openclaw/telemetry/memory-purifier/last-run.md`, overwritten each run. Deterministic operator-facing markdown (run id, counts, warnings, downstream flag, token-usage line). Not a log — a convenience surface.
 - **Package telemetry dir** — holds `last-run.md` only; no per-package JSONL is written.
 
-**Token usage** is **LLM-only**: only Pass 1 and Pass 2 invocations contribute. Deterministic script work (discover, scope, extract, cluster, assemble, render, validate) is never counted. The runtime reports `source: "exact"` when the provider returns usage metadata (e.g. anthropic-sdk), `"approximate"` when computed from actual prompt/completion char counts, `"unavailable"` when no real model was invoked (fixture-backed runs).
+**Token usage** is **scoring-pass-only**: only Pass 1 and Pass 2 model invocations contribute. Deterministic script work (discover, scope, extract, cluster, assemble, render, validate) is never counted. The runtime reports `source: "exact"` when the provider returns usage metadata (e.g. anthropic-sdk), `"approximate"` when computed from actual prompt/completion char counts, `"unavailable"` when no real model was invoked (fixture-backed runs).
 
 **Reporting modes** (in `<workspace>/runtime/memory-state.json` under `memoryPurifier.reporting`):
 
@@ -93,6 +93,10 @@ Cron fires a short launcher message — `Run memory purifier. Read <prompt path>
 ## Installation
 
 ```bash
+# Optional — choose where the skill package lands.
+# Defaults to $HOME/.openclaw/workspace/skills/ when unset.
+export SKILLS_PATH="$HOME/.openclaw/workspace/skills"
+
 # Uses default profile (personal), tz Asia/Manila, announce=false, timeout 1200s:
 curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier-hybrid/main/install.sh | bash
 
@@ -100,6 +104,8 @@ curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier-hybrid/main
 curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier-hybrid/main/install.sh | \
   bash -s -- --agent-profile business --cron-tz Asia/Manila --cron-announce false --timeout-seconds 1200
 ```
+
+Other path overrides follow the same pattern — `export CONFIG_ROOT=…`, `export WORKSPACE=…`, `export TELEMETRY_ROOT=…` before the `curl | bash` line. Full list in [`INSTALL.md §2`](INSTALL.md).
 
 Installer flags:
 
@@ -126,8 +132,8 @@ memory-purifier/
 ├─ prompts/
 │  ├─ incremental-purifier-prompt.md     (cron entrypoint — lean execution prompt)
 │  ├─ reconciliation-purifier-prompt.md  (cron entrypoint — lean execution prompt)
-│  ├─ promotion-pass.md                  (LLM sub-prompt — Pass 1, execution-oriented)
-│  └─ purifier-pass.md                   (LLM sub-prompt — Pass 2, execution-oriented)
+│  ├─ promotion-pass.md                  (scoring sub-prompt — Pass 1, execution-oriented)
+│  └─ purifier-pass.md                   (scoring sub-prompt — Pass 2, execution-oriented)
 ├─ scripts/              (orchestration scripts, entrypoint: run_purifier.py;
 │                         also scripts/sync_cron_delivery.py for delivery drift)
 └─ runtime/              (repo scaffold: .gitkeep only)

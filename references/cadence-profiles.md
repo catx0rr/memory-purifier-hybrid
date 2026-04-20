@@ -1,6 +1,6 @@
 # cadence-profiles.md — Cron Cadence by Profile
 
-**Locked cron schedules for both profiles. Default timezone is `Asia/Manila`; the operator can override per install via `install.sh --cron-tz <IANA>`. Cron passes a short launcher message (`Run memory purifier. Read <prompt path> and follow every step strictly.`) that points the LLM at a step-by-step execution prompt from `prompts/`; the prompt runs `scripts/run_purifier.py` as the orchestrator.**
+**Locked cron schedules for both profiles. Default timezone is `Asia/Manila`; the operator can override per install via `install.sh --cron-tz <IANA>`. Cron passes a short launcher message (`Run memory purifier. Read <prompt path> and follow every step strictly.`) that points the agent at a step-by-step execution prompt from `prompts/`; the prompt runs `scripts/run_purifier.py` as the orchestrator.**
 
 ---
 
@@ -75,7 +75,7 @@ Runtime lock serialization still guards against overlap with the opposite slot (
 
 ## 5. Registration via `openclaw cron add`
 
-Cron hands the LLM a **short launcher message** that tells it which top-level prompt file to read. The prompt itself reads paths, runs `scripts/run_purifier.py`, interprets the status, reconciles cron delivery drift via `scripts/sync_cron_delivery.py`, and reports conditionally.
+Cron hands the agent a **short launcher message** that tells it which top-level prompt file to read. The prompt itself reads paths, runs `scripts/run_purifier.py`, interprets the status, reconciles cron delivery drift via `scripts/sync_cron_delivery.py`, and reports conditionally.
 
 ```bash
 # Incremental (business, default tz, announce=false, timeout=1200)

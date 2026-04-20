@@ -2,7 +2,7 @@
 """Pass 2 — purifier scoring (canonicalization).
 
 Loads prompts/purifier-pass.md as the system prompt, sends clusters
-(from cluster_survivors.py) to the configured LLM backend, validates the
+(from cluster_survivors.py) to the configured model backend, validates the
 returned canonical_claims against the Pass 2 output schema, and emits the
 claims as JSON for downstream assemble_artifacts.py to persist.
 
@@ -421,7 +421,7 @@ def invoke_backend(
     max_tokens: int = None,
     timeout: int = 300,
 ) -> dict:
-    """Invoke the LLM backend. Returns {"raw": <text>, "usage": <token_usage>}."""
+    """Invoke the model backend. Returns {"raw": <text>, "usage": <token_usage>}."""
     if backend == "file":
         if not (fixture_dir or fixture_file):
             raise ValueError("backend=file requires --fixture-dir or --fixture-file")
@@ -507,7 +507,7 @@ def main() -> int:
         help="Path to prior purified-claims.jsonl; if omitted and mode=reconciliation, auto-discover from runtime-dir",
     )
     ap.add_argument("--prior-claims-cap", type=int, default=PRIOR_CLAIMS_CAP, help="Max prior claims to include in context")
-    ap.add_argument("--backend", default=None, help="LLM backend: claude-code | anthropic-sdk | file")
+    ap.add_argument("--backend", default=None, help="Model backend: claude-code | anthropic-sdk | file")
     ap.add_argument("--model", help="Model override")
     ap.add_argument("--max-tokens", type=int, help="Max output tokens")
     ap.add_argument("--fixture-dir", help="Fixture directory (backend=file)")

@@ -32,7 +32,7 @@ Outputs:
 - shared memory-log telemetry at `~/.openclaw/telemetry/memory-log-YYYY-MM-DD.jsonl` (append-only; `component: "memory-purifier.purifier"`)
 - latest-run report at `~/.openclaw/telemetry/memory-purifier/last-run.md` (overwritten each run)
 
-Token usage is LLM-only (Pass 1 + Pass 2); never counts deterministic script work. Source is `exact` / `approximate` / `unavailable` per run.
+Token usage is scoring-pass-only (Pass 1 + Pass 2); never counts deterministic script work. Source is `exact` / `approximate` / `unavailable` per run.
 
 ## Execution order
 
@@ -101,4 +101,4 @@ python3 "$SKILL_ROOT/scripts/validate_outputs.py" --workspace "$WORKSPACE"
 - [README.md](README.md) — package overview
 - [INSTALL.md](INSTALL.md) — install + first-time initialization
 - [references/](references/) — source, cadence, routing, render, config, prompt contracts
-- [prompts/](prompts/) — cron entrypoints (`incremental-purifier-prompt.md`, `reconciliation-purifier-prompt.md`) + Pass-1/Pass-2 LLM sub-prompts (`promotion-pass.md`, `purifier-pass.md`)
+- [prompts/](prompts/) — cron entrypoints (`incremental-purifier-prompt.md`, `reconciliation-purifier-prompt.md`) + Pass-1/Pass-2 scoring sub-prompts (`promotion-pass.md`, `purifier-pass.md`)

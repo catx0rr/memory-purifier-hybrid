@@ -1,6 +1,6 @@
 # prompt-contracts.md — Prompt Invocation, Schemas, and Field Semantics
 
-**Reference material for the two LLM passes. The executable prompts ([`prompts/promotion-pass.md`](../prompts/promotion-pass.md) and [`prompts/purifier-pass.md`](../prompts/purifier-pass.md)) are intentionally lean — everything schema-tutorial, worked-example, or interpretive belongs here.**
+**Reference material for the two scoring passes (narrow schema-bound model calls; the agent supervisor lives at the cron-prompt level, not inside these passes). The executable prompts ([`prompts/promotion-pass.md`](../prompts/promotion-pass.md) and [`prompts/purifier-pass.md`](../prompts/purifier-pass.md)) are intentionally lean — everything schema-tutorial, worked-example, or interpretive belongs here.**
 
 ---
 
@@ -17,12 +17,12 @@ Both passes are stateless. Input JSON → output JSON. The script owns batching,
 
 ## 2. Invocation pattern
 
-`prompts.backend` in `memory-purifier.json` selects the LLM backend. The invocation shape is identical across backends:
+`prompts.backend` in `memory-purifier.json` selects the model backend. The invocation shape is identical across backends:
 
 1. Script builds input JSON per the pass's input schema.
 2. Script loads the prompt markdown file verbatim as the system message.
 3. Script sends the pass's input JSON as the user message.
-4. LLM returns a JSON string.
+4. The model returns a JSON string.
 5. Script parses, validates against the output schema, persists (or raises partial_failure).
 
 No prompt templating, no variable substitution, no prompt-side path resolution.
@@ -58,7 +58,7 @@ No prompt templating, no variable substitution, no prompt-side path resolution.
 | Field | Meaning |
 |---|---|
 | `text` | The semantic payload. Score on this. |
-| `type_hint` | Best-effort from extractor. Guidance, not ground truth — the LLM does not output a type in Pass 1. |
+| `type_hint` | Best-effort from extractor. Guidance, not ground truth — Pass 1 does not output a type. |
 | `source_refs` | Provenance. Multiple cross-surface entries strengthen `cross_time_persistence`. Validated, not invented. |
 | `profile_scope` | Governs eligibility. Business runs must reject personal-only content. |
 | `prior_verdict` | Reconciliation only. A prior `defer` that has reinforced may now warrant `compress` or `promote`. |
@@ -100,9 +100,9 @@ No prompt templating, no variable substitution, no prompt-side path resolution.
 
 ## 4. Clustering (between passes)
 
-`scripts/cluster_survivors.py` sits between the two passes. It is deterministic (no LLM). It:
+`scripts/cluster_survivors.py` sits between the two passes. It is deterministic (no model call). It:
 - Takes Pass 1 survivors (verdicts: `promote`, `compress`, `merge`).
-- Unions candidates via `merge_candidate_ids` (explicit merge hints from Pass 1 carry the LLM's semantic overlap decision).
+- Unions candidates via `merge_candidate_ids` (explicit merge hints from Pass 1 carry the scoring pass's semantic overlap decision).
 - Produces `clusters[]` and populates `cluster_hints.*` for Pass 2 input.
 - Leaves `contradiction_candidates` empty for incremental mode; reconciliation mode can populate it from prior claims.
 
@@ -161,7 +161,7 @@ No prompt templating, no variable substitution, no prompt-side path resolution.
 | `candidates[*].text` | Payload to canonicalize. If the cluster has multiple candidates, choose the clearest or synthesize a minimal form. |
 | `cluster_hints.proposed_type` / `proposed_primary_home` | Guidance only — may be overridden. |
 | `cluster_hints.contradiction_candidates` | Prior claim ids the clusterer flagged as potentially conflicting. Verify against `prior_claims_context` before declaring contradiction. |
-| `prior_claims_context` | Prior canonical claims ranked by relevance to the current clusters (not the most-recent N). See §5.6 below — `score_purifier.py` retrieves and ranks; the LLM consumes a topically-filtered slice. Used for stable `claim_id` reuse, supersession detection, contradiction status. Populated in reconciliation mode. |
+| `prior_claims_context` | Prior canonical claims ranked by relevance to the current clusters (not the most-recent N). See §5.6 below — `score_purifier.py` retrieves and ranks; the scoring pass consumes a topically-filtered slice. Used for stable `claim_id` reuse, supersession detection, contradiction status. Populated in reconciliation mode. |
 | `profile_scope` | Governs eligibility of personal-only primary homes. |
 
 ### 5.3 Output
@@ -212,7 +212,7 @@ No prompt templating, no variable substitution, no prompt-side path resolution.
 - Personal-only primary homes allowed only on `profile_scope == "personal"`.
 - `provenance[]` is non-empty; every `source` traces to an input candidate's `source_refs` (no invented provenance).
 - `contradictions[]` entries have at least one of `competing_claim_id` or `competing_text` populated.
-- `claim_id` is `"<new>"` or matches an entry in `prior_claims_context`. The LLM is forbidden from generating stable ids.
+- `claim_id` is `"<new>"` or matches an entry in `prior_claims_context`. The scoring pass is forbidden from generating stable ids.
 
 ### 5.6 Prior-claim retrieval (not recency slicing)
 
@@ -231,7 +231,7 @@ This matters at scale: as purified state grows into the thousands, a supersessio
 
 ### 5.7 Semantic claim-id reuse
 
-When `assemble_artifacts.py` translates a Pass 2 claim whose `claim_id == "<new>"`, it first looks for an active prior claim with matching `(subject, predicate, primary_home)`. If one exists, the new claim **reuses that prior id** and becomes an in-place update; text differences are treated as rewording rather than a brand-new claim. Stable-hash minting only happens when no prior match is found. This prevents duplicate artifacts for claims that the LLM wrote differently but that represent the same canonical unit.
+When `assemble_artifacts.py` translates a Pass 2 claim whose `claim_id == "<new>"`, it first looks for an active prior claim with matching `(subject, predicate, primary_home)`. If one exists, the new claim **reuses that prior id** and becomes an in-place update; text differences are treated as rewording rather than a brand-new claim. Stable-hash minting only happens when no prior match is found. This prevents duplicate artifacts for claims that the scoring pass wrote differently but that represent the same canonical unit.
 
 ### 5.8 Stale / retire_candidate handling
 
@@ -252,7 +252,7 @@ Input over the ceiling is split deterministically (sorted by `candidate_id` / `c
 
 ## 7. Retry policy
 
-- Malformed JSON from the LLM → retry once with a terse correction nudge.
+- Malformed JSON from the scoring pass → retry once with a terse correction nudge.
 - Schema validation failure → retry once; on second failure, raw response is written to `runtime/locks/failed-<pass>-<run_id>.json` and a `partialFailure` is recorded.
 - Timeout or backend error → no retry in V1; recorded as `partialFailure`.
 
@@ -262,11 +262,11 @@ Reruns of the whole pipeline re-process any batches whose outputs are missing, s
 
 ## 8. Prompt → artifact field translation
 
-LLM output uses `snake_case`. Persisted artifacts use `camelCase`. The translation happens in `assemble_artifacts.py` and is not the prompt's concern.
+Scoring-pass output uses `snake_case`. Persisted artifacts use `camelCase`. The translation happens in `assemble_artifacts.py` and is not the prompt's concern.
 
 Canonical mapping (Pass 2 → `purified-claims.jsonl`):
 
-| LLM `snake_case` | Artifact `camelCase` |
+| Scoring-pass `snake_case` | Artifact `camelCase` |
 |---|---|
 | `claim_id` | `id` |
 | `source_cluster_id` | `sourceClusterId` |
@@ -281,7 +281,7 @@ Canonical mapping (Pass 2 → `purified-claims.jsonl`):
 | `confidence_posture` | `confidencePosture` |
 | `route_rationale` | `routeRationale` |
 
-Scripts also attach fields the LLM does not produce:
+Scripts also attach fields the scoring pass does not produce:
 - `profileScope` (echoed from run-level `profile_scope`)
 - `crossSurfaceSupport` (distinct `source` values in `provenance`)
 - `contradictionClusterId` (UUID assigned during contradiction intake)
@@ -368,6 +368,6 @@ Freshness / confidence posture mapping:
 
 - Do NOT template the prompt file with variable substitution. Load verbatim as the system message.
 - Do NOT inject data into the prompt's instruction section. Data goes only in the user message.
-- Do NOT relax JSON validation because the LLM "got close." Schema mismatch → retry or partialFailure.
+- Do NOT relax JSON validation because the scoring pass "got close." Schema mismatch → retry or partialFailure.
 - Do NOT parallelize batches in V1. Sequential only.
 - Do NOT concatenate multiple passes' outputs into a single file. Each pass writes its own artifact stage.
