@@ -11,7 +11,7 @@ set -euo pipefail
 # first live initialization sequence.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier-hybrid/main/install.sh | bash
 #
 # CLI flags:
 #   --agent-profile business|personal   Profile for seeded config and cron.
@@ -32,6 +32,10 @@ set -euo pipefail
 #                                       Default: 1200.
 #   --skip-cron                         Do not register cron jobs
 #   --force-config                      Overwrite existing memory-purifier.json
+#   --non-interactive                   Skip the interactive y/N confirmation
+#                                       and proceed with the install plan.
+#                                       Also auto-set when stdin is not a TTY
+#                                       (e.g. `curl … | bash`).
 #   --help                              Print usage and exit
 #
 # Runtime layout (created by this installer at $WORKSPACE/runtime/):
@@ -54,8 +58,9 @@ set -euo pipefail
 #   TIMEOUT_SECONDS   default: 1200         (flag --timeout-seconds preferred)
 #   SKIP_CRON         default: 0
 #   FORCE_CONFIG      default: 0
+#   NON_INTERACTIVE   default: 0           (flag --non-interactive preferred)
 
-REPO_URL="https://github.com/catx0rr/memory-purifier.git"
+REPO_URL="https://github.com/catx0rr/memory-purifier-hybrid.git"
 
 CONFIG_ROOT="${CONFIG_ROOT:-$HOME/.openclaw}"
 WORKSPACE="${WORKSPACE:-$HOME/.openclaw/workspace}"
@@ -68,6 +73,7 @@ CRON_ANNOUNCE="${CRON_ANNOUNCE:-false}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-1200}"
 SKIP_CRON="${SKIP_CRON:-0}"
 FORCE_CONFIG="${FORCE_CONFIG:-0}"
+NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 LOCAL_INSTALL=0
 
 while [ $# -gt 0 ]; do
@@ -116,8 +122,12 @@ while [ $# -gt 0 ]; do
             FORCE_CONFIG=1
             shift
             ;;
+        --non-interactive)
+            NON_INTERACTIVE=1
+            shift
+            ;;
         --help|-h)
-            sed -n '4,61p' "$0"
+            sed -n '4,66p' "$0"
             exit 0
             ;;
         *)
@@ -184,18 +194,75 @@ if ! printf '%s' "$TIMEOUT_SECONDS" | grep -Eq '^[1-9][0-9]*$'; then
 fi
 
 echo "Memory Purifier installer"
-echo "-------------------------"
-echo "  PROFILE:          $PROFILE"
-echo "  CONFIG_ROOT:      $CONFIG_ROOT"
-echo "  WORKSPACE:        $WORKSPACE"
-echo "  SKILLS_PATH:      $SKILLS_PATH"
-echo "  SKILL_ROOT:       $SKILL_ROOT"
-echo "  TELEMETRY_ROOT:   $TELEMETRY_ROOT"
-echo "  CRON_TZ:          $CRON_TZ"
-echo "  CRON_ANNOUNCE:    $CRON_ANNOUNCE"
-echo "  TIMEOUT_SECONDS:  $TIMEOUT_SECONDS"
-echo "  SKIP_CRON:        $SKIP_CRON"
+echo "========================="
 echo ""
+echo "Configuration"
+echo "-------------"
+echo "  PROFILE:          $PROFILE"
+echo "  CRON_TZ:          $CRON_TZ"
+echo "  CRON_ANNOUNCE:    $CRON_ANNOUNCE    (reporting.enabled will be seeded to this)"
+echo "  TIMEOUT_SECONDS:  ${TIMEOUT_SECONDS}s"
+echo "  SKIP_CRON:        $SKIP_CRON"
+echo "  FORCE_CONFIG:     $FORCE_CONFIG"
+if [ "$LOCAL_INSTALL" = "1" ]; then
+    echo "  SOURCE:           --local (offline sync from $HERE)"
+else
+    echo "  SOURCE:           git clone/update from $REPO_URL"
+fi
+echo ""
+echo "Directories to create (mkdir -p; existing dirs left alone)"
+echo "----------------------------------------------------------"
+echo "  Package root:     $SKILL_ROOT"
+echo "  Config dir:       $CONFIG_DIR"
+echo "  Runtime dir:      $RUNTIME_DIR"
+echo "  Locks dir:        $LOCKS_DIR"
+echo "  Telemetry dir:    $TELEMETRY_ROOT"
+echo "  Workspace subs:   $WORKSPACE/episodes, $WORKSPACE/memory"
+echo ""
+echo "Seed files (idempotent — existing files preserved unless --force-config)"
+echo "------------------------------------------------------------------------"
+echo "  $CONFIG_FILE"
+echo "  $RUNTIME_DIR/purifier-metadata.json"
+echo "  $RUNTIME_DIR/purified-manifest.json"
+echo "  $RUNTIME_DIR/purifier-last-run-summary.json"
+echo "  $MEM_STATE  (memoryPurifier namespace merged in)"
+echo ""
+echo "Cron registration"
+echo "-----------------"
+if [ "$SKIP_CRON" = "1" ]; then
+    echo "  SKIPPED (--skip-cron). Register manually per INSTALL.md §7."
+elif [ "$PROFILE" = "personal" ]; then
+    echo "  memory-purifier-incremental-morning   15 5 * * 1,2,4,5,6   ($CRON_TZ)"
+    echo "  memory-purifier-incremental-evening   15 17 * * *          ($CRON_TZ)"
+    echo "  memory-purifier-reconciliation        15 5 * * 3,0         ($CRON_TZ)"
+else
+    echo "  memory-purifier-incremental           15 13 * * 1,2,4,5,6  ($CRON_TZ)"
+    echo "  memory-purifier-reconciliation        15 13 * * 3,0        ($CRON_TZ)"
+fi
+if [ "$CRON_ANNOUNCE" = "true" ]; then
+    echo "  Delivery:                             announce (chat-enabled)"
+else
+    echo "  Delivery:                             --no-deliver (silent; telemetry still recorded)"
+fi
+echo ""
+echo "This installer does NOT run a purifier pass — follow INSTALL.md for first-time initialization."
+echo ""
+
+# Interactive confirmation. Skipped when --non-interactive is passed, NON_INTERACTIVE=1,
+# or stdin is not a TTY (so `curl ... | bash` is not blocked by an unreadable
+# prompt — the operator already opted in by piping).
+if [ "$NON_INTERACTIVE" != "1" ] && [ -t 0 ]; then
+    printf "Proceed with install? [y/N]: "
+    read -r reply
+    case "$reply" in
+        [yY]|[yY][eE][sS]) ;;
+        *)
+            echo "Aborted — no changes made."
+            exit 0
+            ;;
+    esac
+    echo ""
+fi
 
 # ── A. Install/update the repo ────────────────────────────────────────
 
@@ -605,13 +672,21 @@ fi
 
 echo ""
 if [ "$fail" = "0" ]; then
-    echo "Install scaffold ready. Live artifacts are NOT yet created."
+    echo "Install complete. Live artifacts are NOT yet created — the first live run in INSTALL.md populates them."
     echo ""
-    echo "Follow INSTALL.md to complete first-time initialization:"
-    echo "  1. Verify seeded runtime files"
-    echo "  2. Dry-run:     python3 $SKILL_ROOT/scripts/run_purifier.py --mode incremental --dry-run"
-    echo "  3. First run:   python3 $SKILL_ROOT/scripts/run_purifier.py --mode incremental"
-    echo "  4. Confirm cron:  openclaw cron list --json | jq '.[] | select(.name | startswith(\"memory-purifier\"))'"
+    echo "Where things landed:"
+    echo "  Package:         $SKILL_ROOT"
+    echo "  Config file:     $CONFIG_FILE"
+    echo "  Runtime seeds:   $RUNTIME_DIR"
+    echo "                     purifier-metadata.json, purified-manifest.json, purifier-last-run-summary.json, locks/"
+    echo "  Shared state:    $MEM_STATE   (memoryPurifier namespace)"
+    echo "  Local report:    $TELEMETRY_ROOT/last-run.md   (overwritten each run)"
+    echo "  Memory-log dir:  $(dirname "$TELEMETRY_ROOT")   (shared memory-log-YYYY-MM-DD.jsonl is appended here each run)"
+    echo ""
+    echo "Next: follow INSTALL.md for guided first-time initialization."
+    echo "  - Quick dry-run:   python3 $SKILL_ROOT/scripts/run_purifier.py --mode incremental --dry-run"
+    echo "  - First live run:  python3 $SKILL_ROOT/scripts/run_purifier.py --mode incremental"
+    echo "  - Confirm cron:    openclaw cron list --json | jq '.[] | select(.name | startswith(\"memory-purifier\"))'"
     echo ""
     exit 0
 else

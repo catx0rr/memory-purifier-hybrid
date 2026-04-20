@@ -94,10 +94,10 @@ Cron fires a short launcher message — `Run memory purifier. Read <prompt path>
 
 ```bash
 # Uses default profile (personal), tz Asia/Manila, announce=false, timeout 1200s:
-curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier-hybrid/main/install.sh | bash
 
 # Or specify explicitly:
-curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier/main/install.sh | \
+curl -fsSL https://raw.githubusercontent.com/catx0rr/memory-purifier-hybrid/main/install.sh | \
   bash -s -- --agent-profile business --cron-tz Asia/Manila --cron-announce false --timeout-seconds 1200
 ```
 
